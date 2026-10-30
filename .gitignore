@@ -1,0 +1,7 @@
+# Nunca subir datos ni secretos
+*.xlsx
+*.xls
+*.csv
+.env
+.DS_Store
+Thumbs.db
