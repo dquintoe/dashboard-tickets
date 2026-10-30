@@ -1,11 +1,7 @@
-// Dashboard de Seguimiento de Tickets — versión estática para GitHub Pages.
-// Login con Google Identity Services y lectura del Excel vía Drive API, todo en el navegador.
+// Dashboard de Seguimiento de Tickets — vista para Administrador y Visualizador.
+// Requiere auth.js (sesión, roles) y data.js (lectura del Excel).
 "use strict";
-const CFG = Object.assign({ sheetName: "US", dueSoonDays: 3, autoRefreshMinutes: 5, allowedEmails: [] }, window.DASHBOARD_CONFIG || {});
-const ALLOWED = CFG.allowedEmails.map(e => e.trim().toLowerCase()).filter(Boolean);
-const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const TOKEN_KEY = "tickets.token";
 
 const SEM_ORDER = ["Vencido", "Por vencer", "Sin fecha", "En plazo", "Cerrado"];
 const SEM_VAR = { "Vencido":"--crit", "Por vencer":"--warn", "En plazo":"--good", "Sin fecha":"--none", "Cerrado":"--closed" };
@@ -13,9 +9,7 @@ const SEM_ICON = { "Vencido":"⛔", "Por vencer":"⚠️", "En plazo":"✅", "Si
 const PRI_ORDER = ["Crítica", "Alta", "Media", "Baja", "Sin prioridad"];
 let DATA = null, charts = {}, sortKey = null, sortDir = 1;
 
-const $ = id => document.getElementById(id);
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmtDate = iso => iso ? iso.split("-").reverse().join("-") : "";
 const countBy = (arr, f) => arr.reduce((m, t) => (m[f(t)] = (m[f(t)] || 0) + 1, m), {});
 
@@ -179,145 +173,80 @@ function drawIssues() {
 
 $("btnClear").onclick = () => { $("fText").value = ""; setF({ fTipo:"", fStatus:"", fPrioridad:"", fModulo:"", fSemaforo:"", fOpen:true }); sortKey = null; render(); };
 
-
-// ------------------------------------------------------------------ sesión
-let tokenClient = null, accessToken = null, tokenExp = 0, USER = null, refreshTimer = null;
-
-const store = {
-  get() { try { return JSON.parse(sessionStorage.getItem(TOKEN_KEY) || "null"); } catch { return null; } },
-  set(v) { try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify(v)); } catch { /* sin almacenamiento: solo dura la pestaña */ } },
-  clear() { try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* nada */ } },
-};
+// ------------------------------------------------------------------ sesión y rol
+let USER = null, ROLE = null, refreshTimer = null;
 
 function showLogin(msg) {
   $("appView").hidden = true; $("loginView").hidden = false;
   $("loginErr").hidden = !msg; $("loginErr").textContent = msg || "";
   clearInterval(refreshTimer);
 }
-function showApp() { $("loginView").hidden = true; $("appView").hidden = false; }
 
-function configProblem() {
-  if (!CFG.clientId || CFG.clientId.startsWith("PEGAR")) return "Falta configurar clientId en config.js.";
-  if (!CFG.driveFile || CFG.driveFile.startsWith("PEGAR")) return "Falta configurar driveFile en config.js.";
-  return null;
-}
-
-function initGoogle() {
-  if (tokenClient) return true;
-  if (!window.google?.accounts?.oauth2) return false;
-  const hint = ALLOWED.length === 1 ? ALLOWED[0] : undefined;
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CFG.clientId,
-    scope: SCOPE,
-    hint,
-    hosted_domain: hint ? hint.split("@")[1] : undefined,
-    callback: onToken,
-    error_callback: e => showLogin(e?.type === "popup_closed" ? "Se cerró la ventana de Google antes de terminar." :
-                                   e?.type === "popup_failed_to_open" ? "El navegador bloqueó la ventana de Google; permite ventanas emergentes para este sitio." :
-                                   "No se pudo iniciar sesión con Google."),
-  });
-  return true;
-}
-
-function login() {
+async function login() {
   const p = configProblem();
   if (p) return showLogin(p);
-  if (!initGoogle()) return showLogin("No cargó el servicio de Google. Revisa tu conexión y recarga la página.");
-  tokenClient.requestAccessToken({ prompt: "" });
-}
-
-async function onToken(resp) {
-  if (resp.error) return showLogin(`Google rechazó el acceso (${resp.error}).`);
-  if (!google.accounts.oauth2.hasGrantedAllScopes(resp, SCOPE)) return showLogin("Debes aceptar el permiso de lectura de Google Drive para ver el dashboard.");
-  accessToken = resp.access_token;
-  tokenExp = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
-  await startSession();
+  try { await Auth.request([SCOPES.READ]); await startSession(); }
+  catch (err) { showLogin(err.message); }
 }
 
 async function startSession() {
-  // Verifica quién inició sesión (Drive devuelve el correo con el mismo permiso de solo lectura)
-  const r = await gfetch("https://www.googleapis.com/drive/v3/about?fields=user(emailAddress,displayName,photoLink)");
-  if (!r) return;
-  if (!r.ok) { const msg = await driveError(r, "identificar la cuenta"); revoke(); return showLogin(msg); }
-  const u = (await r.json()).user || {};
-  const email = (u.emailAddress || "").toLowerCase();
-  if (ALLOWED.length && !ALLOWED.includes(email)) {
-    revoke();
-    return showLogin(`La cuenta ${email || "(desconocida)"} no tiene acceso a este dashboard.`);
+  try {
+    USER = await Auth.whoami();
+    const ok = await load(true);
+    if (!ok) return;
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => load(false), CFG.autoRefreshMinutes * 60000);
+  } catch (err) {
+    if (err instanceof AuthError) return showLogin(err.message);
+    showLogin(err.message);
   }
-  USER = { email, name: u.displayName, picture: u.photoLink };
-  store.set({ token: accessToken, exp: tokenExp });
-  $("userEmail").textContent = email;
-  if (USER.picture) { $("userPic").src = USER.picture; $("userPic").hidden = false; }
-  showApp();
-  await load(true);
-  clearInterval(refreshTimer);
-  refreshTimer = setInterval(() => load(false), CFG.autoRefreshMinutes * 60000);
-}
-
-function revoke() {
-  if (accessToken && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(accessToken, () => {});
-  accessToken = null; tokenExp = 0; USER = null; store.clear();
-}
-
-// fetch con el token; si expiró, vuelve a la pantalla de acceso
-async function gfetch(url) {
-  if (!accessToken || Date.now() > tokenExp - 30000) {
-    store.clear();
-    showLogin("La sesión de Google expiró (dura 1 hora). Vuelve a iniciar sesión.");
-    return null;
-  }
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (r.status === 401) { store.clear(); showLogin("La sesión de Google expiró. Vuelve a iniciar sesión."); return null; }
-  return r;
 }
 
 // ------------------------------------------------------------------ datos
-function driveFileId() {
-  const s = CFG.driveFile.trim();
-  const m = s.match(/\/d\/([\w-]{20,})/) || s.match(/[?&]id=([\w-]{20,})/);
-  return m ? m[1] : s;
-}
-
-async function driveError(r, what) {
-  let msg = "";
-  try { msg = (await r.json()).error?.message || ""; } catch { /* sin cuerpo */ }
-  if (r.status === 404) return `No se encontró el archivo en Drive o tu cuenta no tiene acceso a él (revisa driveFile en config.js).`;
-  if (r.status === 403) return `Drive denegó el acceso al ${what}: ${msg || "permiso insuficiente"}. ¿Está habilitada la Google Drive API en el proyecto?`;
-  return `Drive respondió ${r.status} al ${what}. ${msg}`;
-}
-
 async function load(force) {
-  if (!force && document.hidden) return;
-  $("meta").textContent = "Cargando…";
+  if (!force && document.hidden) return true;
+  if (DATA) $("meta").textContent = "Actualizando…";
   $("banner").style.display = "none";
   try {
     const id = driveFileId(), base = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`;
-    const mr = await gfetch(`${base}?fields=name,mimeType,modifiedTime&supportsAllDrives=true`);
-    if (!mr) return;
-    if (!mr.ok) throw new Error(await driveError(mr, "leer el archivo"));
-    const meta = await mr.json();
+    const meta = await Auth.json(`${base}?fields=name,mimeType,modifiedTime&supportsAllDrives=true`, {}, "leer el archivo");
     const url = meta.mimeType === "application/vnd.google-apps.spreadsheet"
       ? `${base}/export?mimeType=${encodeURIComponent(XLSX_MIME)}`
       : `${base}?alt=media&supportsAllDrives=true`;
-    const fr = await gfetch(url);
-    if (!fr) return;
-    if (!fr.ok) throw new Error(await driveError(fr, "descargar el archivo"));
+    const fr = await Auth.api(url);
+    if (!fr.ok) throw new Error(await apiErrorMessage(fr, "descargar el archivo"));
     const parsed = TicketData.parseWorkbook(await fr.arrayBuffer(), CFG);
+
+    // El rol se valida con cada lectura: si se quita el acceso, la sesión se cierra.
+    const role = resolveRole(USER.email, parsed.access);
+    if (!role) {
+      DATA = null; Auth.revoke();
+      showLogin(`La cuenta ${USER.email} no tiene acceso a este dashboard. Solicítalo al administrador.`);
+      return false;
+    }
+    ROLE = role;
+    paintUser(USER, ROLE);
+    $("adminLink").hidden = ROLE !== ROLES.ADMIN;
+    $("loginView").hidden = true; $("appView").hidden = false;
+
     DATA = { ...parsed, meta };
     const mod = meta.modifiedTime ? new Date(meta.modifiedTime).toLocaleString("es-PE") : "—";
     $("meta").textContent = `${meta.name} · modificado ${mod} · leído ${new Date().toLocaleTimeString("es-PE")}`;
     fillSelects(); render();
+    return true;
   } catch (err) {
+    if (err instanceof AuthError) { showLogin(err.message); return false; }
+    if (!DATA) { showLogin(err.message); return false; }
     $("banner").style.display = "block";
     $("banner").textContent = err.message || String(err);
     $("meta").textContent = "";
+    return true;
   }
 }
 
 // ------------------------------------------------------------------ arranque
 $("btnLogin").onclick = login;
-$("btnLogout").onclick = e => { e.preventDefault(); revoke(); showLogin(); };
+$("btnLogout").onclick = e => { e.preventDefault(); Auth.revoke(); DATA = null; showLogin(); };
 $("btnRefresh").onclick = () => load(true);
 $("btnClear").onclick = () => { $("fText").value = ""; sortKey = null; setF({ fTipo:"", fStatus:"", fPrioridad:"", fModulo:"", fSemaforo:"", fOpen:true }); };
 document.querySelectorAll("th").forEach(th => th.onclick = () => {
@@ -326,17 +255,11 @@ document.querySelectorAll("th").forEach(th => th.onclick = () => {
 });
 ["fText","fTipo","fStatus","fPrioridad","fModulo","fSemaforo","fOpen"].forEach(id => $(id).addEventListener("input", render));
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && USER) load(false); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && USER && DATA) load(false); });
 
 (function boot() {
   const p = configProblem();
   if (p) return showLogin(p);
-  const saved = store.get();   // reanuda la sesión al recargar la pestaña (mientras el token siga vigente)
-  if (saved && saved.exp > Date.now() + 60000) {
-    accessToken = saved.token; tokenExp = saved.exp;
-    startSession();
-  } else showLogin();
-  // la librería de Google carga en asíncrono; se inicializa en cuanto esté lista
-  const t = setInterval(() => { if (initGoogle()) clearInterval(t); }, 200);
-  setTimeout(() => clearInterval(t), 15000);
+  if (Auth.active && (Auth.has(SCOPES.READ) || Auth.has(SCOPES.WRITE))) startSession();   // reanuda la sesión de esta pestaña
+  else showLogin();
 })();

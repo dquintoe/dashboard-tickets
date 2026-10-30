@@ -1,112 +1,91 @@
-# Dashboard de Seguimiento de Tickets — GitHub Pages
+# Dashboard de Seguimiento de Tickets — v2 (roles Administrador / Visualizador)
 
-Versión 100 % estática (HTML + JavaScript) del dashboard de `Lista_de_US_DQ_seguimiento`.
-Se publica gratis en GitHub Pages y funciona desde cualquier equipo (PC, laptop, celular):
+Página estática publicada en GitHub Pages: **https://dquintoe.github.io/dashboard-tickets/**
+Datos: Hoja de cálculo de Google `Lista_de_US_DQ_seguimiento` (hoja **US**) · Proyecto Google Cloud `dashboard-tickets-513201` (cuenta dquinto@csticorp.biz).
 
-- **Login:** Google Identity Services, directamente en la página.
-- **Datos:** el navegador descarga el Excel desde **tu** Google Drive (permiso de solo lectura) y lo procesa ahí mismo.
-- **GitHub solo guarda el código.** Ni el Excel ni los tickets ni contraseñas llegan nunca al repositorio.
+## Roles
 
-| Archivo | Para qué |
+| Rol | Dashboard (`index.html`) | Administración (`admin.html`) | Permiso en el archivo de Drive |
+|---|---|---|---|
+| **Administrador** | Sí | Sí: registros + roles y accesos | Editor |
+| **Visualizador** | Sí | No | Lector |
+
+Cuentas iniciales: `dquinto@csticorp.biz` → Administrador (incluye ver el dashboard) · `dquinto@gmail.com` → Visualizador.
+
+- Los roles se guardan en una hoja nueva **Accesos** dentro del mismo archivo (la crea la página de Administración).
+- `superAdmins` en `config.js` (dquinto@csticorp.biz) es siempre Administrador, aunque la hoja Accesos se borre o modifique: nadie puede dejar el sistema sin administrador.
+- **La seguridad real la da Google Drive**: al asignar un rol, la página comparte el archivo como Lector o Editor. Un Visualizador no puede modificar datos aunque manipule la página, porque Drive se lo impide.
+
+## Página de Administración
+
+**Registros** (hoja US)
+- Alta, edición y eliminación de registros directamente en la Hoja de Google.
+- Campos con lista desplegable: los que en el Drive tienen validación de datos (Tipo, Status, Prioridad, Módulo SAP, Ambiente); los valores se leen de la hoja **Listas**, así que agregar un valor allí lo agrega en el formulario.
+- Fechas con selector de fecha (se guardan como fecha dd-mm-aaaa), % Avance de 0 a 100, horas numéricas, el resto campo libre.
+- Días Abiertos y Semáforo no se editan: son fórmulas del Drive (en filas nuevas se copian si faltan).
+- Antes de guardar o eliminar se verifica que la fila no haya cambiado en el Drive (evita pisar cambios de otra persona o borrar la fila equivocada).
+
+**Roles y accesos** (hoja Accesos)
+- Agregar usuario, cambiar rol o quitarlo. Al guardar, comparte el archivo (o ajusta / quita el permiso) automáticamente.
+- Columna “Permiso en Drive” con alertas si el permiso no corresponde al rol, y botón para corregirlo.
+- Lista de personas que tienen acceso al archivo pero no tienen rol en el dashboard.
+
+## Archivos
+
+| Archivo | Cambio en v2 |
 |---|---|
-| `index.html` | estructura de la página (login + dashboard) |
-| `config.js` | **lo único que editas**: Client ID, URL del Excel, correos permitidos |
-| `data.js` | lectura del Excel, semáforo, días abiertos, calidad de datos |
-| `app.js` | login de Google, descarga de Drive, gráficos, filtros y tabla |
-| `styles.css` | estilos (modo claro y oscuro) |
+| `index.html`, `app.js` | Dashboard: valida el rol, muestra el rol y el botón **⚙ Administración** solo al Administrador |
+| `admin.html`, `admin.js` | **Nuevos**: página de administración |
+| `auth.js` | **Nuevo**: sesión de Google, roles y permisos compartidos por ambas páginas |
+| `data.js` | Lee también la hoja Accesos |
+| `config.js` | Ya configurado (Client ID, archivo de Drive, superAdmins, accesos iniciales) |
+| `styles.css` | Estilos de administración |
 
 ---
 
-## Paso 1 — Credencial en Google Cloud (con dquinto@csticorp.biz)
+## Paso 1 — Ajustes en Google Cloud (dquinto@csticorp.biz, proyecto dashboard-tickets)
 
-1. Entra a <https://console.cloud.google.com> **con la cuenta corporativa** y crea un proyecto (`dashboard-tickets`).
-2. **APIs y servicios → Biblioteca →** busca **Google Drive API** → *Habilitar*.
-3. **Google Auth Platform / Pantalla de consentimiento de OAuth:**
-   - Público: **Interno** (solo cuentas `@csticorp.biz`, sin verificación de Google).
-     Si no aparece *Interno*: **Externo**, en modo *Prueba*, y agrega `dquinto@csticorp.biz` como usuario de prueba.
-   - Acceso a datos (scopes): agrega `https://www.googleapis.com/auth/drive.readonly`.
-4. **Clientes / Credenciales → Crear cliente OAuth → Aplicación web**:
-   - **Orígenes de JavaScript autorizados:**
-     - `https://<tu-usuario-github>.github.io` ← sin `/` final ni nombre del repo
-     - `http://localhost:8000` ← para probar en tu PC (opcional)
-   - **URI de redireccionamiento:** déjalo vacío (no se usa).
-   - Copia el **ID de cliente** (`xxxx.apps.googleusercontent.com`). No necesitas el *secret*.
+1. **Habilitar Google Sheets API**: ☰ → APIs & Services → Library → *Google Sheets API* → **Enable**.
+2. **Agregar el permiso de edición**: Google Auth Platform → **Data Access** → **Add or remove scopes** → filtrar `auth/drive` → marcar
+   `https://www.googleapis.com/auth/drive` (*See, edit, create, and delete all of your Google Drive files*) → **Update** → **Save**.
+   Mantener también `.../auth/drive.readonly`.
+3. **Permitir la cuenta @gmail.com**: Google Auth Platform → **Audience**.
+   - Si *User type* es **Internal**: pulsar **Make external** → confirmar. (Internal solo deja entrar cuentas @csticorp.biz.)
+   - *Publishing status* debe quedar en **Testing** (no pulsar *Publish app*).
+   - **Test users → + Add users** → agregar `dquinto@csticorp.biz` y `dquinto@gmail.com` → **Save**.
+4. Los orígenes de JavaScript del cliente OAuth (`https://dquintoe.github.io`, `http://localhost:8000`) no cambian.
 
-## Paso 2 — Editar `config.js`
+> En modo Testing, Google muestra “Google no verificó esta app” al iniciar sesión: pulsar **Continuar**.
+> Cada persona nueva debe agregarse como *Test user* (máx. 100); la página de Administración recuerda este paso con un enlace directo.
 
-```js
-clientId: "1234567890-abc.apps.googleusercontent.com",
-driveFile: "https://docs.google.com/spreadsheets/d/XXXXXXXX/edit",   // o la URL del .xlsx en Drive
-allowedEmails: ["dquinto@csticorp.biz"],
-```
+## Paso 2 — Subir los archivos a GitHub (repositorio dquintoe/dashboard-tickets)
 
-## Paso 3 — Subir el código a GitHub
+1. En `https://github.com/dquintoe/dashboard-tickets` → **Add file → Upload files**.
+2. Descomprimir el zip, **entrar** a la carpeta y arrastrar **todos los archivos** (Ctrl+A), incluidos `.gitignore` y `.nojekyll`.
+   Los que ya existen se reemplazan; `admin.html`, `admin.js` y `auth.js` se agregan.
+3. **Commit changes** → esperar en **Actions** que *pages build and deployment* quede en verde (1–2 min).
+4. Verificar que todos los archivos están en la **raíz** del repositorio.
 
-Necesitas una cuenta en <https://github.com>. Elige **una** de estas dos formas.
+Con Git: `git add . && git commit -m "v2: roles y administración" && git push`.
 
-### Opción A — Desde el navegador (sin instalar nada)
+## Paso 3 — Primer uso (una sola vez)
 
-1. En GitHub: **+ → New repository**.
-   - Nombre: `dashboard-tickets` · Visibilidad: **Public** (GitHub Pages gratis requiere repo público; no hay datos en él).
-   - Sin README → **Create repository**.
-2. En la página del repo vacío: **uploading an existing file**.
-3. Arrastra **el contenido** de esta carpeta (los archivos, no la carpeta) incluido `.nojekyll`.
-   En Windows, los archivos que empiezan con punto se ven activando *Vista → Elementos ocultos*.
-4. **Commit changes**.
+1. Abrir https://dquintoe.github.io/dashboard-tickets/ con **Ctrl+F5** e iniciar sesión con `dquinto@csticorp.biz`.
+2. Pulsar **⚙ Administración** → **Autorizar edición con Google** → aceptar el permiso de Drive.
+3. Pestaña **Roles y accesos** → **Crear hoja de accesos**. Crea la hoja *Accesos* con las dos cuentas y comparte el archivo con `dquinto@gmail.com` como **Lector**.
+4. Probar con `dquinto@gmail.com` en una ventana de incógnito: debe ver el dashboard con el rol Visualizador y sin el botón de Administración.
 
-### Opción B — Con Git (recomendado para ir actualizando)
-
-Instala Git (<https://git-scm.com/download/win>) y en una terminal dentro de esta carpeta:
-
-```bash
-git init
-git add .
-git commit -m "Dashboard de seguimiento de tickets"
-git branch -M main
-git remote add origin https://github.com/<tu-usuario>/dashboard-tickets.git
-git push -u origin main
-```
-
-La primera vez Git abre una ventana para iniciar sesión en GitHub.
-Para publicar cambios después: `git add . && git commit -m "cambio" && git push`.
-
-## Paso 4 — Activar GitHub Pages
-
-1. En el repo: **Settings → Pages**.
-2. *Build and deployment* → Source: **Deploy from a branch** → Branch: **main**, carpeta **/ (root)** → **Save**.
-3. En 1–2 minutos aparece la URL: `https://<tu-usuario>.github.io/dashboard-tickets/`.
-   El avance se ve en la pestaña **Actions** (“pages build and deployment”).
-4. Abre la URL → **Continuar con Google** → acepta el permiso de lectura de Drive. Listo.
-
-Cada `git push` (o archivo editado en la web de GitHub) vuelve a publicar automáticamente.
-
-## Probar en tu PC antes de subir (opcional)
-
-```bash
-cd dashboard-tickets-pages
-python -m http.server 8000
-```
-Abre <http://localhost:8000> (requiere el origen `http://localhost:8000` del paso 1.4).
-
----
-
-## Seguridad: qué protege a los datos
-
-- **Google, no la página, decide quién entra.** Con público *Interno*, solo cuentas `@csticorp.biz` pueden iniciar sesión.
-- **Drive decide quién lee el archivo.** Aunque alguien vea el código, solo obtiene datos si su cuenta tiene acceso al Excel.
-- `allowedEmails` añade un filtro extra en la página (cierra la sesión si la cuenta no está en la lista).
-- El token de Google vive solo en la pestaña (sessionStorage) y dura 1 hora; luego pide iniciar sesión de nuevo. **Salir** lo revoca.
-- `config.js` es público: contiene el Client ID (público por diseño) y el ID del archivo, que por sí solo no da acceso.
-- Confirma con tu empresa si puedes alojar la herramienta en una cuenta personal de GitHub; si existe una organización corporativa de GitHub, mejor crear el repo allí.
+> Si al compartir aparece un error de política, la administración de Google Workspace de csticorp.biz no permite compartir con cuentas externas: compartir el archivo manualmente o pedir la excepción al administrador.
 
 ## Problemas frecuentes
 
 | Mensaje | Solución |
 |---|---|
-| `Error 400: origin_mismatch` / `redirect_uri_mismatch` | El origen en la credencial debe ser exactamente `https://<usuario>.github.io` (sin barra final ni repo). Los cambios tardan unos minutos. |
-| `Error 403: org_internal` | Iniciaste sesión con una cuenta fuera de `csticorp.biz`; usa la corporativa. |
-| `access_denied` / `admin_policy_enforced` | El administrador de Workspace bloquea apps de terceros: debe permitir el Client ID (Admin → Seguridad → Control de acceso a API). |
-| “Drive denegó el acceso… ¿está habilitada la Google Drive API?” | Habilítala en el mismo proyecto de la credencial (paso 1.2). |
-| “No se encontró el archivo…” | Revisa `driveFile` y que la cuenta tenga acceso al Excel. |
-| La ventana de Google no abre | Permite ventanas emergentes para `github.io`. |
-| La página no cambia tras un push | Espera al deploy en **Actions** y recarga con Ctrl+F5. |
+| `Error 403: org_internal` con la cuenta gmail | El público sigue en Internal: Paso 1.3. |
+| `Error 403: access_denied` | Falta agregar la cuenta en Test users (Paso 1.3). |
+| “La API de Google necesaria no está habilitada” | Habilitar Google Sheets API (Paso 1.1). |
+| “Falta el permiso de edición de Google Drive” | Agregar el scope `auth/drive` (Paso 1.2), Salir y volver a entrar aceptando todos los permisos. |
+| “No se encontró el archivo… o tu cuenta no tiene acceso” | El archivo no está compartido con esa cuenta: asignarle un rol desde Administración. |
+| “La cuenta … no tiene acceso a este dashboard” | La cuenta no está en la hoja Accesos. |
+| “El registro cambió en el Drive desde que se cargó” | Otra persona editó la fila; la lista se recargó, repetir el cambio. |
+| La página no muestra los cambios tras subirlos | Esperar el deploy en Actions y recargar con Ctrl+F5. |

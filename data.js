@@ -82,7 +82,21 @@
       if (!t.responsable) issues.push({ tipo: "Sin responsable", detalle: `US ${ref}` });
       if (t.abierto && !t.f_compromiso) issues.push({ tipo: "Abierto sin fecha compromiso", detalle: `US ${ref}: ${t.desc.slice(0, 70)}` });
     });
-    return { tickets, issues, today };
+    return { tickets, issues, today, access: parseAccess(wb, cfg) };
+  }
+
+  // Hoja de roles (Accesos): Email | Rol | Nombre | ... ; null si la hoja no existe.
+  function parseAccess(wb, cfg) {
+    const ws = wb.Sheets[cfg.accessSheet];
+    if (!ws) return null;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+    if (!rows.length) return [];
+    const hdr = rows[0].map(h => clean(h).toLowerCase());
+    const ci = name => hdr.findIndex(h => h.startsWith(name));
+    const e = ci("email") >= 0 ? ci("email") : ci("correo"), r = ci("rol"), n = ci("nombre");
+    if (e < 0 || r < 0) return [];
+    return rows.slice(1).map(row => ({ email: clean(row[e]), rol: clean(row[r]), nombre: n >= 0 ? clean(row[n]) : "" }))
+      .filter(a => a.email);
   }
 
   window.TicketData = { parseWorkbook };

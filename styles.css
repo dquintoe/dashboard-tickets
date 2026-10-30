@@ -80,3 +80,58 @@ details summary { cursor:pointer; font-weight:600; }
 .login .err { color:var(--crit-ink); font-size:14px; margin:0 0 16px; }
 .login .small { color:var(--muted); font-size:12px; margin:16px 0 0; }
 [hidden] { display:none !important; }
+
+/* ---- roles, navegación y administración ---- */
+a.btn { display:inline-flex; align-items:center; gap:6px; text-decoration:none; color:var(--ink); background:var(--surface);
+        border:1px solid var(--line); border-radius:8px; padding:7px 10px; font-weight:600; }
+a.btn:hover { border-color:var(--s1); }
+.role { display:inline-block; margin-left:6px; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:650; border:1px solid var(--line); white-space:nowrap; }
+.role.admin { color:var(--s1); border-color:var(--s1); }
+.role.view { color:var(--ink2); }
+.role:empty { display:none; }
+button.primary { background:var(--s1); border-color:var(--s1); color:#fff; }
+button.primary:hover { filter:brightness(1.08); }
+button.danger { color:var(--crit-ink); }
+button.danger:hover { border-color:var(--crit); }
+button:disabled { opacity:.55; cursor:not-allowed; }
+button.sm { padding:3px 8px; font-size:12px; margin-right:4px; }
+.tabs { display:flex; gap:4px; margin-bottom:12px; border-bottom:1px solid var(--line); }
+.tab { border:0; border-bottom:2px solid transparent; border-radius:0; background:none; padding:9px 14px; color:var(--ink2); }
+.tab[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--s1); }
+.tab:hover { border-bottom-color:var(--axis); }
+.toolgroup { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.toolgroup input[type=search] { min-width:min(240px, 100%); }
+.tabletools h2 { font-size:14px; margin:0; }
+tr.click { cursor:pointer; }
+td.act { white-space:nowrap; text-align:right; width:1%; }
+.tag { margin-left:4px; }
+.perm { font-size:12px; font-weight:600; }
+.perm.ok { color:var(--good-ink); } .perm.warn { color:var(--warn-ink); }
+.infobox { border:1px solid var(--line); border-left:3px solid var(--s1); border-radius:8px; padding:10px 12px; margin-bottom:12px; color:var(--ink2); font-size:13px; }
+.initbox { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; border:1px dashed var(--axis); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+.initbox ul { margin:6px 0 0; padding-left:18px; font-size:13px; }
+dialog.dlg { border:1px solid var(--line); border-radius:14px; padding:0; background:var(--surface); color:var(--ink); width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 32px); }
+dialog.dlg.wide { width:min(900px, calc(100vw - 32px)); }
+dialog.dlg::backdrop { background:rgba(0,0,0,.45); }
+dialog.dlg form { padding:20px 20px 0; }
+.dlgfoot { position:sticky; bottom:0; background:var(--surface); padding:6px 0 16px; border-top:1px solid var(--line); margin-top:4px; }
+dialog.dlg h2 { font-size:17px; margin:0 0 2px; }
+.formgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px 14px; margin:14px 0; }
+.formgrid.one { grid-template-columns:1fr; }
+.formgrid label { display:flex; flex-direction:column; gap:4px; font-size:12px; font-weight:600; color:var(--ink2); min-width:0; }
+.formgrid label.full { grid-column:1 / -1; }
+.formgrid label.chk { flex-direction:row; align-items:center; gap:8px; font-weight:500; color:var(--ink); }
+.formgrid input, .formgrid select, .formgrid textarea {
+  font:inherit; font-size:14px; font-weight:400; color:var(--ink); background:var(--page); border:1px solid var(--line); border-radius:8px; padding:7px 9px; width:100%; min-width:0; }
+.formgrid textarea { resize:vertical; }
+.formgrid input:focus, .formgrid select:focus, .formgrid textarea:focus { outline:2px solid var(--s1); outline-offset:-1px; }
+.formgrid input:disabled { color:var(--muted); }
+.fhint { font-weight:400; color:var(--muted); font-size:11px; }
+.req { color:var(--crit-ink); }
+.dlgactions { display:flex; gap:8px; align-items:center; margin-top:6px; }
+.dlgactions .spacer { flex:1; }
+.err { color:var(--crit-ink); font-size:13px; margin:6px 0; }
+label.chk { display:flex; gap:8px; align-items:center; font-size:13px; margin:8px 0; }
+.toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--ink); color:var(--page); padding:10px 16px; border-radius:10px;
+         font-size:13px; max-width:min(720px, calc(100vw - 32px)); box-shadow:0 6px 24px rgba(0,0,0,.25); z-index:10; }
+.flabel { display:block; }
